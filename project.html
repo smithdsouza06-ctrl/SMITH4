@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Commute Optimizer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#03060d;--panel:#070d1a;--card:#0b1424;--border:#112240;--border2:#1a3a6a;
+  --cyan:#00f5ff;--cyan-dim:rgba(0,245,255,0.1);--green:#00ff88;--green-dim:rgba(0,255,136,0.1);
+  --orange:#ff6b35;--yellow:#ffd60a;--red:#ff2d55;--text:#c8d8f0;--muted:#4a6080;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Rajdhani',sans-serif;background:var(--bg);color:var(--text);font-size:15px;}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);pointer-events:none;z-index:9000;}
+
+/* HEADER */
+header{position:fixed;top:0;left:0;right:0;height:52px;background:rgba(7,13,26,0.97);border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:16px;padding:0 20px;z-index:1000;backdrop-filter:blur(12px);}
+.logo{font-family:'Orbitron',monospace;font-size:.95rem;font-weight:900;color:var(--cyan);text-shadow:0 0 20px rgba(0,245,255,0.5);letter-spacing:2px;white-space:nowrap;}
+.logo span{color:rgba(200,216,240,0.4);font-size:.68rem;letter-spacing:1px;margin-left:6px;}
+.hright{margin-left:auto;display:flex;align-items:center;gap:12px;}
+.tbadge{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:.65rem;font-weight:700;letter-spacing:1px;border:1px solid;text-transform:uppercase;transition:all .4s;}
+.tbadge.low{border-color:var(--green);color:var(--green);background:var(--green-dim);}
+.tbadge.medium{border-color:var(--yellow);color:var(--yellow);background:rgba(255,214,10,0.1);}
+.tbadge.high{border-color:var(--red);color:var(--red);background:rgba(255,45,85,0.1);animation:blink 1.2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
+.tdot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 5px currentColor;}
+.clock{font-family:'Orbitron',monospace;font-size:.66rem;color:var(--muted);letter-spacing:1.5px;}
+
+/* LAYOUT */
+.app{display:flex;height:100vh;padding-top:52px;}
+
+/* SIDEBAR */
+.sidebar{width:350px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border2);overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;}
+.sidebar::-webkit-scrollbar{width:3px;}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border2);}
+.sblock{padding:14px 15px;border-bottom:1px solid var(--border);}
+.slabel{font-family:'Orbitron',monospace;font-size:.56rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:9px;display:flex;align-items:center;gap:8px;}
+.slabel::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border2),transparent);}
+
+/* INPUTS */
+.locinputs{display:flex;flex-direction:column;gap:7px;}
+.locrow{display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--border2);border-radius:7px;padding:9px 11px;transition:border-color .2s,box-shadow .2s;}
+.locrow:focus-within{border-color:var(--cyan);box-shadow:0 0 0 1px rgba(0,245,255,0.12);}
+.pip{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:0 0 6px currentColor;}
+.pip.go{background:var(--green);color:var(--green);}
+.pip.de{background:var(--red);color:var(--red);}
+.locrow input{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:.87rem;font-weight:500;}
+.locrow input::placeholder{color:var(--muted);}
+.swapbtn{align-self:center;background:none;border:1px solid var(--border2);border-radius:5px;color:var(--muted);width:26px;height:26px;cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center;transition:all .25s;}
+.swapbtn:hover{border-color:var(--cyan);color:var(--cyan);transform:rotate(180deg);}
+
+/* MODES */
+.mtabs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+.mtab{background:var(--card);border:1px solid var(--border2);border-radius:7px;padding:9px 5px;text-align:center;cursor:pointer;transition:all .2s;color:var(--muted);font-size:.66rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;}
+.mtab .mi{font-size:1.2rem;display:block;margin-bottom:2px;}
+.mtab:hover{border-color:var(--cyan);color:var(--text);}
+.mtab.active{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);}
+
+/* GO BUTTON */
+.gobtn{width:100%;padding:13px;background:linear-gradient(135deg,rgba(0,245,255,0.12),rgba(0,255,136,0.07));border:1px solid var(--cyan);border-radius:8px;color:var(--cyan);font-family:'Orbitron',monospace;font-size:.73rem;font-weight:700;letter-spacing:2.5px;cursor:pointer;text-transform:uppercase;transition:all .2s;box-shadow:0 0 18px rgba(0,245,255,0.08);position:relative;overflow:hidden;}
+.gobtn::before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(0,245,255,0.07),transparent);transform:translateX(-100%);transition:transform .55s;}
+.gobtn:hover{box-shadow:0 0 26px rgba(0,245,255,0.28);transform:translateY(-1px);}
+.gobtn:hover::before{transform:translateX(100%);}
+.gobtn:active{transform:translateY(0);}
+.gobtn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* VEHICLE STATUS */
+.vstatus{background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:11px 13px;display:none;}
+.vstatus.show{display:block;}
+.vst-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;}
+.vst-row:last-child{margin:0;}
+.vst-label{font-size:.72rem;color:var(--muted);font-weight:600;letter-spacing:.4px;}
+.vst-val{font-family:'Orbitron',monospace;font-size:.7rem;color:var(--cyan);}
+.vst-val.orange{color:var(--orange);}
+.vst-val.green{color:var(--green);}
+.vst-val.red{color:var(--red);}
+.progress-bar{width:100%;height:5px;background:var(--border2);border-radius:3px;margin-top:9px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:3px;transition:width .5s ease;width:0%;}
+
+/* COMPARISON CARDS */
+.compgrid{display:flex;flex-direction:column;gap:7px;}
+.ccard{background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:11px 13px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;animation:fadeSlide .35s ease both;}
+@keyframes fadeSlide{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.ccard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;}
+.ccard.car::before{background:var(--cyan);}
+.ccard.bus::before{background:var(--green);}
+.ccard.bike::before{background:var(--yellow);}
+.ccard.walk::before{background:var(--orange);}
+.ccard:hover{transform:translateX(3px);border-color:rgba(200,216,240,0.15);}
+.ccard.sel{border-color:var(--cyan);background:rgba(0,245,255,0.03);}
+.ctop{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.cmode{font-size:.83rem;font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.ctime{font-family:'Orbitron',monospace;font-size:.92rem;font-weight:700;color:var(--cyan);}
+.ctime.jam{color:var(--orange);}
+.cmeta{display:flex;gap:11px;font-size:.7rem;color:var(--muted);}
+.badge{padding:1px 6px;border-radius:20px;font-size:.58rem;font-weight:700;letter-spacing:.3px;}
+.badge.fastest{background:rgba(0,245,255,0.12);color:var(--cyan);border:1px solid rgba(0,245,255,0.25);}
+.badge.cheapest{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,255,136,0.25);}
+.badge.eco{background:rgba(255,214,10,0.1);color:var(--yellow);border:1px solid rgba(255,214,10,0.25);}
+.badge.warn{background:rgba(255,107,53,0.12);color:var(--orange);border:1px solid rgba(255,107,53,0.3);animation:blink 1.8s infinite;}
+
+/* TRAFFIC PANEL */
+.tpanel{background:rgba(255,107,53,0.05);border:1px solid rgba(255,107,53,0.2);border-radius:9px;padding:11px 13px;}
+.theadr{display:flex;align-items:center;gap:7px;font-size:.76rem;font-weight:700;color:var(--orange);margin-bottom:8px;}
+.theadr .wi{animation:blink 1.3s infinite;}
+.tsegs{display:flex;flex-direction:column;gap:5px;}
+.seg{display:flex;justify-content:space-between;align-items:center;font-size:.73rem;}
+.seg-n{color:var(--text);}
+.sdel{font-family:'Orbitron',monospace;font-size:.6rem;padding:2px 7px;border-radius:10px;}
+.sdel.low{background:var(--green-dim);color:var(--green);}
+.sdel.medium{background:rgba(255,214,10,0.1);color:var(--yellow);}
+.sdel.high{background:rgba(255,45,85,0.1);color:var(--red);}
+.rerobtn{width:100%;margin-top:9px;padding:9px;background:rgba(255,107,53,0.1);border:1px solid var(--orange);border-radius:7px;color:var(--orange);font-family:'Orbitron',monospace;font-size:.63rem;font-weight:700;letter-spacing:1.5px;cursor:pointer;text-transform:uppercase;transition:all .2s;}
+.rerobtn:hover{background:rgba(255,107,53,0.18);box-shadow:0 0 14px rgba(255,107,53,0.3);}
+
+
+
+/* MAP */
+.map-area{flex:1;position:relative;}
+#map{width:100%;height:100%;background:#04080f;}
+.mapinfo{position:absolute;top:13px;right:13px;background:rgba(7,13,26,0.92);border:1px solid var(--border2);border-radius:9px;padding:11px 14px;z-index:500;backdrop-filter:blur(12px);min-width:155px;font-size:.73rem;display:none;}
+.mapinfo.show{display:block;}
+.mir{display:flex;justify-content:space-between;gap:13px;margin-bottom:5px;}
+.mir:last-child{margin:0;}
+.mil{color:var(--muted);}
+.miv{font-family:'Orbitron',monospace;font-size:.63rem;color:var(--cyan);}
+.maphint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(7,13,26,0.85);border:1px solid var(--border2);border-radius:20px;padding:6px 14px;font-size:.68rem;color:var(--muted);z-index:500;pointer-events:none;backdrop-filter:blur(6px);white-space:nowrap;}
+.mapctrl{position:absolute;bottom:16px;right:10px;display:flex;flex-direction:column;gap:7px;z-index:500;}
+.mcbtn{background:rgba(7,13,26,0.9);border:1px solid var(--border2);border-radius:7px;color:var(--text);padding:7px 10px;font-size:.65rem;font-family:'Orbitron',monospace;letter-spacing:1px;cursor:pointer;backdrop-filter:blur(8px);transition:all .2s;white-space:nowrap;}
+.mcbtn:hover{border-color:var(--cyan);color:var(--cyan);}
+
+/* SPINNER */
+.spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(0,245,255,0.2);border-top-color:var(--cyan);border-radius:50%;animation:rot .6s linear infinite;vertical-align:middle;margin-right:5px;}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* TOAST */
+.toast{position:fixed;bottom:18px;right:18px;background:var(--panel);border:1px solid var(--border2);border-radius:9px;padding:10px 14px;font-size:.78rem;color:var(--text);box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:9999;transform:translateY(65px);opacity:0;transition:all .3s ease;max-width:270px;}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.ok{border-color:var(--green);}
+.toast.err{border-color:var(--red);}
+.toast.warn{border-color:var(--orange);}
+.empty{text-align:center;padding:18px 0;color:var(--muted);font-size:.76rem;line-height:1.7;}
+
+/* VEHICLE MARKER pulse ring */
+@keyframes vehiclePulse{0%{transform:scale(1);opacity:.8}100%{transform:scale(2.5);opacity:0}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SmartCommute <span>// LIVE TRACKER</span></div>
+  <div class="hright">
+    <div class="tbadge low" id="tbadge"><span class="tdot"></span><span id="ttext">LOW TRAFFIC</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<div class="app">
+  <div class="sidebar">
+
+    <!-- Inputs -->
+    <div class="sblock">
+      <div class="slabel">Journey Points</div>
+      <div class="locinputs">
+        <div class="locrow"><span class="pip go"></span><input type="text" id="origin" placeholder="Origin — city or address"/></div>
+        <div style="display:flex;justify-content:flex-end;margin:2px 0"><button class="swapbtn" onclick="swapLoc()" title="Swap">⇅</button></div>
+        <div class="locrow"><span class="pip de"></span><input type="text" id="dest" placeholder="Destination — city or address"/></div>
+      </div>
+    </div>
+
+    <!-- Mode -->
+    <div class="sblock">
+      <div class="slabel">Travel Mode</div>
+      <div class="mtabs">
+        <div class="mtab active" data-mode="car"><span class="mi">🚗</span>Car</div>
+        <div class="mtab" data-mode="bus"><span class="mi">🚌</span>Bus</div>
+        <div class="mtab" data-mode="bike"><span class="mi">🚲</span>Bike</div>
+        <div class="mtab" data-mode="walk"><span class="mi">🚶</span>Walk</div>
+        <div class="mtab" data-mode="train"><span class="mi">🚆</span>Train</div>
+        <div class="mtab" data-mode="auto"><span class="mi">🛺</span>Auto</div>
+      </div>
+    </div>
+
+    <!-- Go -->
+    <div class="sblock">
+      <button class="gobtn" id="gobtn" onclick="findRoute()">⚡ OPTIMIZE ROUTE</button>
+    </div>
+
+    <!-- Vehicle Live Status -->
+    <div class="sblock">
+      <div class="slabel">Live Vehicle Status</div>
+      <div class="vstatus" id="vstatus">
+        <div class="vst-row"><span class="vst-label">Vehicle</span><span class="vst-val" id="vs-icon">🚗 Car</span></div>
+        <div class="vst-row"><span class="vst-label">Status</span><span class="vst-val green" id="vs-status">MOVING</span></div>
+        <div class="vst-row"><span class="vst-label">Speed</span><span class="vst-val" id="vs-speed">— km/h</span></div>
+        <div class="vst-row"><span class="vst-label">Progress</span><span class="vst-val" id="vs-pct">0%</span></div>
+        <div class="vst-row"><span class="vst-label">ETA</span><span class="vst-val" id="vs-eta">—</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+      </div>
+      <div id="vstatus-empty" style="color:var(--muted);font-size:.76rem;text-align:center;padding:12px 0;">Start a route to see live tracking ↑</div>
+    </div>
+
+    <!-- Comparison -->
+    <div class="sblock">
+      <div class="slabel">Route Comparison</div>
+      <div class="compgrid" id="compgrid">
+        <div class="empty">Enter origin &amp; destination<br/>then tap Optimize ↑</div>
+      </div>
+    </div>
+
+    <!-- Traffic -->
+    <div class="sblock" id="tsec" style="display:none">
+      <div class="slabel">Traffic Detected</div>
+      <div class="tpanel">
+        <div class="theadr"><span class="wi">⚠️</span> Congestion Ahead!</div>
+        <div class="tsegs" id="tsegs"></div>
+        <button class="rerobtn" onclick="doReroute()">🔄 FIND ALTERNATE ROUTE</button>
+      </div>
+    </div>
+
+
+    <div style="height:10px"></div>
+  </div>
+
+  <!-- Map -->
+  <div class="map-area">
+    <div id="map"></div>
+    <div class="mapinfo" id="mapinfo">
+      <div class="mir"><span class="mil">Distance</span><span class="miv" id="mi1">—</span></div>
+      <div class="mir"><span class="mil">Est. Time</span><span class="miv" id="mi2">—</span></div>
+      <div class="mir"><span class="mil">Traffic</span><span class="miv" id="mi3">—</span></div>
+      <div class="mir"><span class="mil">Mode</span><span class="miv" id="mi4">—</span></div>
+    </div>
+    <div class="maphint" id="mhint">Click map → set 📍 Origin, then 📍 Destination</div>
+    <div class="mapctrl">
+      <button class="mcbtn" onclick="locateMe()">📡 MY LOCATION</button>
+      <button class="mcbtn" onclick="clearAll()">✕ CLEAR</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════
+//  MAP SETUP
+// ════════════════════════════════════════
+const map = L.map('map',{zoomControl:false}).setView([19.076,72.877],11);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'© OpenStreetMap © CartoDB', maxZoom:19
+}).addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+// ─── State ───
+let rc=null, oMark=null, dMark=null;
+let oCoords=null, dCoords=null, step='o', selMode='car', tLevel='low';
+let routeLatLngs=[];       // full decoded route polyline points
+let vehicleMarker=null;    // moving icon on map
+let trafficCircles=[];     // red traffic zone circles on map
+let animFrame=null;        // requestAnimationFrame id
+let animProgress=0;        // 0–1 along the route
+let animSpeed=0.0008;      // how fast vehicle moves (adjustable)
+let isMoving=false;
+let totalRouteDist=10;     // km
+let totalRouteMins=20;     // mins
+
+// ════════════════════════════════════════
+//  MARKERS
+// ════════════════════════════════════════
+function mkPin(color,lbl){
+  return L.divIcon({className:'',
+    html:`<div style="position:relative">
+      <div style="width:14px;height:14px;background:${color};border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px ${color},0 0 22px ${color}44"></div>
+      <div style="position:absolute;top:-19px;left:50%;transform:translateX(-50%);background:rgba(7,13,26,0.92);border:1px solid ${color}55;color:${color};font-size:8px;padding:2px 5px;border-radius:3px;white-space:nowrap;font-family:Orbitron,monospace;letter-spacing:1px">${lbl}</div>
+    </div>`,
+    iconSize:[14,14],iconAnchor:[7,7]
+  });
+}
+
+function mkVehicle(emoji){
+  return L.divIcon({className:'',
+    html:`<div style="position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center">
+      <div style="position:absolute;width:36px;height:36px;border-radius:50%;background:rgba(0,245,255,0.15);border:1.5px solid rgba(0,245,255,0.5);animation:vehiclePulse 1.4s ease-out infinite"></div>
+      <div style="position:absolute;width:22px;height:22px;border-radius:50%;background:rgba(0,245,255,0.08);border:1px solid rgba(0,245,255,0.35);animation:vehiclePulse 1.4s ease-out infinite .35s"></div>
+      <span style="font-size:18px;position:relative;z-index:2;filter:drop-shadow(0 0 6px rgba(0,245,255,0.8))">${emoji}</span>
+    </div>`,
+    iconSize:[36,36],iconAnchor:[18,18]
+  });
+}
+
+const modeEmoji={car:'🚗',bus:'🚌',bike:'🚲',walk:'🚶',train:'🚆',auto:'🛺'};
+const modeSpeeds={car:40,bus:22,bike:16,walk:5,train:60,auto:25}; // km/h avg
+
+function setO(lat,lng){
+  oCoords=[lat,lng];
+  if(oMark)map.removeLayer(oMark);
+  oMark=L.marker([lat,lng],{icon:mkPin('#00ff88','ORIGIN')}).addTo(map);
+  document.getElementById('origin').value=`${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+function setD(lat,lng){
+  dCoords=[lat,lng];
+  if(dMark)map.removeLayer(dMark);
+  dMark=L.marker([lat,lng],{icon:mkPin('#ff2d55','DEST')}).addTo(map);
+  document.getElementById('dest').value=`${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+map.on('click',e=>{
+  const{lat,lng}=e.latlng;
+  if(step==='o'){
+    setO(lat,lng); step='d';
+    document.getElementById('mhint').textContent='Now click to set 📍 Destination';
+    toast('📍 Origin set! Click destination now.','ok');
+  } else {
+    setD(lat,lng); step='o';
+    document.getElementById('mhint').style.display='none';
+  }
+});
+
+// ════════════════════════════════════════
+//  GEOCODE
+// ════════════════════════════════════════
+async function geo(q){
+  const p=q.split(',').map(s=>parseFloat(s.trim()));
+  if(p.length>=2&&!isNaN(p[0])&&!isNaN(p[1]))return{lat:p[0],lng:p[1]};
+  const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
+  const d=await r.json();
+  if(!d.length)throw new Error('Place not found: '+q);
+  return{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)};
+}
+
+// ════════════════════════════════════════
+//  FIND ROUTE
+// ════════════════════════════════════════
+async function findRoute(){
+  const ov=document.getElementById('origin').value.trim();
+  const dv=document.getElementById('dest').value.trim();
+  if(!ov||!dv){toast('⚠️ Enter origin & destination','err');return;}
+  const btn=document.getElementById('gobtn');
+  btn.innerHTML='<span class="spin"></span>COMPUTING...';
+  btn.disabled=true;
+  try{
+    const[o,d]=await Promise.all([geo(ov),geo(dv)]);
+    setO(o.lat,o.lng); setD(d.lat,d.lng);
+    stopAnimation();
+    clearTrafficZones();
+    drawRoute(o,d,false);
+    buildCards(o,d);
+  }catch(e){toast('❌ '+e.message,'err');}
+  finally{btn.innerHTML='⚡ OPTIMIZE ROUTE';btn.disabled=false;}
+}
+
+// ════════════════════════════════════════
+//  DRAW ROUTE + capture waypoints
+// ════════════════════════════════════════
+function drawRoute(o,d,alt){
+  if(rc){map.removeControl(rc);rc=null;}
+  stopAnimation();
+  clearTrafficZones();
+
+  const color=alt?'#00ff88':'#00f5ff';
+  const altMid=alt?getAltMid(o,d):null;
+  const wps=alt
+    ?[L.latLng(o.lat,o.lng),L.latLng(altMid.lat,altMid.lng),L.latLng(d.lat,d.lng)]
+    :[L.latLng(o.lat,o.lng),L.latLng(d.lat,d.lng)];
+
+  rc=L.Routing.control({
+    waypoints:wps,
+    routeWhileDragging:false,
+    show:false,
+    addWaypoints:false,
+    lineOptions:{styles:[{color:'#000',weight:7,opacity:.2},{color,weight:4,opacity:.85}]},
+    createMarker:()=>null
+  }).addTo(map);
+
+  rc.on('routesfound',e=>{
+    const route=e.routes[0];
+    totalRouteDist=(route.summary.totalDistance/1000);
+    totalRouteMins=Math.round(route.summary.totalTime/60);
+
+    // Extract all lat/lng points from the route geometry
+    routeLatLngs=route.coordinates.map(c=>L.latLng(c.lat,c.lng));
+
+
+    document.getElementById('mi1').textContent=totalRouteDist.toFixed(1)+' km';
+    document.getElementById('mi2').textContent=fmt(totalRouteMins);
+    document.getElementById('mi3').textContent=tLevel.toUpperCase();
+    document.getElementById('mi4').textContent=selMode.toUpperCase();
+    document.getElementById('mapinfo').classList.add('show');
+
+    // place traffic zones then start animation
+    simTraffic(o,d);
+    startAnimation(alt);
+
+    if(alt)toast('✅ Alternate route — traffic avoided!','ok');
+  });
+
+  map.fitBounds([[o.lat,o.lng],[d.lat,d.lng]],{padding:[60,80]});
+}
+
+function getAltMid(o,d){
+  return{
+    lat:(o.lat+d.lat)/2+(d.lng-o.lng)*0.18,
+    lng:(o.lng+d.lng)/2-(d.lat-o.lat)*0.18
+  };
+}
+
+// ════════════════════════════════════════
+//  VEHICLE ANIMATION
+// ════════════════════════════════════════
+function startAnimation(isAlt){
+  if(vehicleMarker){map.removeLayer(vehicleMarker);vehicleMarker=null;}
+  animProgress=0;
+  isMoving=true;
+
+  // Speed based on mode; alt route = normal
+  const kmh=modeSpeeds[selMode]||40;
+  // We want a visible animation in ~60s real time across all routes
+  // animSpeed = fraction of route per animation frame (~60fps)
+  animSpeed= 1 / (60 * 60); // completes in ~60s  (adjust lower = slower)
+
+  // Show sidebar status
+  document.getElementById('vstatus').classList.add('show');
+  document.getElementById('vstatus-empty').style.display='none';
+  document.getElementById('vs-icon').textContent=modeEmoji[selMode]+' '+selMode.charAt(0).toUpperCase()+selMode.slice(1);
+
+  vehicleMarker=L.marker(routeLatLngs[0],{icon:mkVehicle(modeEmoji[selMode]),zIndexOffset:1000}).addTo(map);
+
+  function animate(){
+    if(!isMoving)return;
+    animProgress=Math.min(1,animProgress+animSpeed);
+
+    // Interpolate position along routeLatLngs
+    const pos=getPointOnRoute(animProgress);
+    if(vehicleMarker)vehicleMarker.setLatLng(pos);
+
+    // Check if vehicle is in a traffic zone → slow down
+    const inJam=checkInTrafficZone(pos);
+    const displaySpeed=inJam? Math.round(kmh*0.25) : kmh;
+    const statusTxt=inJam?'SLOW — TRAFFIC':'MOVING';
+    const statusClass=inJam?'orange':'green';
+
+    // Update sidebar
+    const pct=Math.round(animProgress*100);
+    const remainMins=Math.round(totalRouteMins*(1-animProgress));
+    document.getElementById('vs-speed').textContent=displaySpeed+' km/h';
+    document.getElementById('vs-pct').textContent=pct+'%';
+    document.getElementById('vs-eta').textContent=remainMins<=0?'ARRIVED':fmt(remainMins);
+    document.getElementById('prog-fill').style.width=pct+'%';
+    const vsEl=document.getElementById('vs-status');
+    vsEl.textContent=animProgress>=1?'ARRIVED ✅':statusTxt;
+    vsEl.className='vst-val '+(animProgress>=1?'green':statusClass);
+
+    // Traffic badge flicker when in jam
+    if(inJam&&tLevel==='low'){
+      tLevel='medium'; updBadge();
+      toast('🚦 Traffic detected ahead! Tap Reroute.','warn');
+    }
+
+    if(animProgress<1){
+      animFrame=requestAnimationFrame(animate);
+    } else {
+      isMoving=false;
+      toast('🏁 Arrived at destination!','ok');
+    }
+  }
+  animFrame=requestAnimationFrame(animate);
+}
+
+function stopAnimation(){
+  isMoving=false;
+  if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}
+  if(vehicleMarker){map.removeLayer(vehicleMarker);vehicleMarker=null;}
+  document.getElementById('vstatus').classList.remove('show');
+  document.getElementById('vstatus-empty').style.display='';
+}
+
+// Given progress 0–1, return interpolated LatLng along routeLatLngs
+function getPointOnRoute(t){
+  if(!routeLatLngs.length)return L.latLng(0,0);
+  const idx=t*(routeLatLngs.length-1);
+  const i=Math.floor(idx);
+  const frac=idx-i;
+  if(i>=routeLatLngs.length-1)return routeLatLngs[routeLatLngs.length-1];
+  const a=routeLatLngs[i], b=routeLatLngs[i+1];
+  return L.latLng(
+    a.lat+(b.lat-a.lat)*frac,
+    a.lng+(b.lng-a.lng)*frac
+  );
+}
+
+// ════════════════════════════════════════
+//  TRAFFIC ZONES ON MAP
+// ════════════════════════════════════════
+let trafficZoneData=[]; // [{center, radius, level}]
+
+function simTraffic(o,d){
+  const h=new Date().getHours();
+  const peak=(h>=8&&h<=10)||(h>=17&&h<=20);
+  const r=Math.random();
+  tLevel=peak?(r>.35?'high':'medium'):(r>.6?'medium':r>.82?'high':'low');
+  updBadge();
+
+  clearTrafficZones();
+  trafficZoneData=[];
+
+  const sec=document.getElementById('tsec');
+  const segs=document.getElementById('tsegs');
+
+  if(tLevel!=='low' && routeLatLngs.length>4){
+    // Place traffic circles at ~30%, ~60% of route
+    const positions=[0.3,0.6];
+    const levels=tLevel==='high'?['high','medium']:['medium','low'];
+    const delays=tLevel==='high'?['+18 MIN','+7 MIN']:['+6 MIN','+3 MIN'];
+
+    positions.forEach((t,i)=>{
+      const center=getPointOnRoute(t);
+      const radius=tLevel==='high'?600:350; // meters
+      const col=levels[i]==='high'?'#ff2d55':levels[i]==='medium'?'#ffd60a':'#ff6b35';
+
+      // Pulsing circle on map
+      const circle=L.circle(center,{
+        radius,
+        color:col,
+        fillColor:col,
+        fillOpacity:0.18,
+        weight:2,
+        dashArray:'6 4',
+        opacity:0.7
+      }).addTo(map);
+
+      // Tooltip label
+      const icon=L.divIcon({className:'',
+        html:`<div style="background:rgba(7,13,26,0.88);border:1px solid ${col};border-radius:4px;padding:3px 7px;font-family:Orbitron,monospace;font-size:9px;color:${col};letter-spacing:1px;white-space:nowrap">${levels[i].toUpperCase()} TRAFFIC ${delays[i]}</div>`,
+        iconAnchor:[0,0]
+      });
+      const label=L.marker(center,{icon,zIndexOffset:500}).addTo(map);
+
+      trafficCircles.push(circle,label);
+      trafficZoneData.push({center,radius,level:levels[i]});
+    });
+
+    // Sidebar traffic list
+    sec.style.display='block';
+    segs.innerHTML=trafficZoneData.map((z,i)=>`
+      <div class="seg">
+        <span class="seg-n">🔴 Zone ${i+1} — ${Math.round(z.radius)}m ahead</span>
+        <span class="sdel ${z.level}">${delays[i]}</span>
+      </div>`).join('');
+
+  } else {
+    sec.style.display='none';
+    toast('✅ Route clear — no significant traffic!','ok');
+  }
+}
+
+function clearTrafficZones(){
+  trafficCircles.forEach(c=>map.removeLayer(c));
+  trafficCircles=[];
+  trafficZoneData=[];
+}
+
+// Check if a LatLng is inside any traffic zone
+function checkInTrafficZone(pos){
+  return trafficZoneData.some(z=>{
+    const d=map.distance(pos,z.center);
+    return d<z.radius;
+  });
+}
+
+// ════════════════════════════════════════
+//  REROUTE
+// ════════════════════════════════════════
+function doReroute(){
+  if(!oCoords||!dCoords){toast('⚠️ No active route','err');return;}
+  toast('🔄 Computing alternate route...','warn');
+  document.getElementById('tsec').style.display='none';
+  tLevel='low'; updBadge();
+  setTimeout(()=>{
+    drawRoute({lat:oCoords[0],lng:oCoords[1]},{lat:dCoords[0],lng:dCoords[1]},true);
+    buildCards({lat:oCoords[0],lng:oCoords[1]},{lat:dCoords[0],lng:dCoords[1]});
+  },350);
+}
+
+// ════════════════════════════════════════
+//  COMPARISON CARDS
+// ════════════════════════════════════════
+function buildCards(o,d){
+  const R=6371,dLa=(d.lat-o.lat)*Math.PI/180,dLn=(d.lng-o.lng)*Math.PI/180;
+  const a=Math.sin(dLa/2)**2+Math.cos(o.lat*Math.PI/180)*Math.cos(d.lat*Math.PI/180)*Math.sin(dLn/2)**2;
+  const dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))*1.3;
+  const tf=tLevel==='high'?1.65:tLevel==='medium'?1.28:1;
+  const modes=[
+    {k:'car', ic:'🚗',lb:'Car',     sp:40,cp:5.8,co2:'High', badge:'fastest'},
+    {k:'bus', ic:'🚌',lb:'Bus',     sp:22,cp:0.9,co2:'Low',  badge:'cheapest'},
+    {k:'bike',ic:'🚲',lb:'Bicycle', sp:16,cp:0,  co2:'Zero', badge:'eco'},
+    {k:'walk',ic:'🚶',lb:'Walking', sp:5, cp:0,  co2:'Zero', badge:null},
+  ];
+  const g=document.getElementById('compgrid'); g.innerHTML='';
+  modes.forEach((m,i)=>{
+    const raw=Math.round((dist/m.sp)*60);
+    const hit=m.k==='car'&&tLevel!=='low';
+    const mn=hit?Math.round(raw*tf):raw;
+    const cost=(dist*m.cp).toFixed(0);
+    const c=document.createElement('div');
+    c.className=`ccard ${m.k}${m.k===selMode?' sel':''}`;
+    c.style.animationDelay=(i*.07)+'s';
+    const bh=m.badge?`<span class="badge ${m.badge}">${m.badge.toUpperCase()}</span>`:'';
+    const wh=hit?`<span class="badge warn">+${Math.round(raw*(tf-1))} MIN</span>`:'';
+    c.innerHTML=`<div class="ctop"><div class="cmode">${m.ic} ${m.lb} ${bh}${wh}</div><div class="ctime${hit?' jam':''}">${fmt(mn)}</div></div>
+    <div class="cmeta"><span>📏 ${dist.toFixed(1)} km</span><span>💰 ${+cost>0?'₹'+cost:'Free'}</span><span>🌿 ${m.co2}</span></div>`;
+    g.appendChild(c);
+  });
+}
+
+// ════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════
+function updBadge(){
+  const b=document.getElementById('tbadge'),t=document.getElementById('ttext');
+  b.className=`tbadge ${tLevel}`; t.textContent=tLevel.toUpperCase()+' TRAFFIC';
+  document.getElementById('mi3').textContent=tLevel.toUpperCase();
+}
+
+function fmt(m){const h=Math.floor(m/60),mn=m%60;return h>0?`${h}h ${mn}m`:`${mn} min`;}
+
+
+
+function swapLoc(){
+  const ov=document.getElementById('origin').value,dv=document.getElementById('dest').value;
+  document.getElementById('origin').value=dv; document.getElementById('dest').value=ov;
+  const tc=oCoords; oCoords=dCoords; dCoords=tc;
+  if(oCoords)setO(oCoords[0],oCoords[1]);
+  if(dCoords)setD(dCoords[0],dCoords[1]);
+}
+
+function locateMe(){
+  if(!navigator.geolocation){toast('❌ Geolocation not supported','err');return;}
+  toast('📡 Getting your location...','');
+  navigator.geolocation.getCurrentPosition(
+    p=>{setO(p.coords.latitude,p.coords.longitude);map.setView([p.coords.latitude,p.coords.longitude],13);toast('📍 Location set as origin!','ok');},
+    ()=>toast('❌ Could not get location','err')
+  );
+}
+
+function clearAll(){
+  stopAnimation();
+  if(rc){map.removeControl(rc);rc=null;}
+  clearTrafficZones();
+  if(oMark){map.removeLayer(oMark);oMark=null;}
+  if(dMark){map.removeLayer(dMark);dMark=null;}
+  oCoords=dCoords=null; routeLatLngs=[];
+  document.getElementById('origin').value=''; document.getElementById('dest').value='';
+  document.getElementById('compgrid').innerHTML='<div class="empty">Enter origin & destination<br/>then tap Optimize ↑</div>';
+  document.getElementById('tsec').style.display='none';
+  document.getElementById('mapinfo').classList.remove('show');
+  document.getElementById('mhint').style.display='';
+  document.getElementById('mhint').textContent='Click map → set 📍 Origin, then 📍 Destination';
+  step='o'; tLevel='low'; updBadge();
+  toast('🗑️ Cleared','');
+}
+
+// Mode tabs
+document.querySelectorAll('.mtab').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.mtab').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); selMode=b.dataset.mode;
+    document.getElementById('mi4').textContent=selMode.toUpperCase();
+  });
+});
+
+// Enter key
+['origin','dest'].forEach(id=>{
+  document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')findRoute();});
+});
+
+// Clock
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-IN',{hour12:false});},1000);
+
+// Toast
+let tt;
+function toast(msg,type=''){
+  const t=document.getElementById('toast'); t.textContent=msg; t.className=`toast show ${type}`;
+  clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),3800);
+}
+
+
+setTimeout(()=>toast('👆 Type city names or click the map, then hit Optimize!',''),700);
+</script>
+</body>
+</html>
